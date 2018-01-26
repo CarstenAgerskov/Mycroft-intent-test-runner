@@ -4,10 +4,10 @@ This is the first cut at a test runner for testing a skill based on json files i
 
 I will publish this test runner it in this immature state, to get feedback on the approach I have taken, and if its usable at all.
 
-In particular, the code depends on timing to correlate messages on the bus. Suggestions for a better way is most welcome.
+The test runner works by publishing an utterance on the bus, and waits for responses on the bus. Hence, 
+the code depends on timing to correlate messages on the bus. The first message received that fits a pattern is accepted as a response. Suggestions for a better way is most welcome.
 
 The problem is, that I miss a strong way to corrrelate messages, for instance a GUID that the first producer creates and write to the message. All consumers copy that GUID from request to response. This would not only facilitate testing and debugging, but might even be an advantage if, in the future, several identical modules listens on the bus.
-
 
 
 ## Setting up
@@ -65,6 +65,9 @@ I would like in my json file defining the test to be something like
 ```
 { “AssertEqual”: { “type”: “ remove_context”, “data” : {'context': 'ConfirmContext'}}
 ```
+It would be nice if the intent method could distinguish between test messages
+and real messages. And choose to execute "dummy" code in case of a test message. 
+Maybe context can be used for this, but a dedicated "debug" flag or header would be better.
 
 
 ### Integration into Mycroft core
