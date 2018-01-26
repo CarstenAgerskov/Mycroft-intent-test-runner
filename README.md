@@ -72,3 +72,25 @@ If this test runner it is found usable, it could be integrated
 into mycroft-core/mycroft/skills/container.py, and activated 
 by a command line argument to the container.
  
+### The json files for the example above, for the cows lists skill
+```
+{
+  "utterance": "add some to my none list",
+  "intent_type": "AddTaskToListIntent",
+  "intent": {
+    "taskname": "some",
+    "listname": "none",
+    "AddTaskToListKeyword": "add"
+  }
+}
+```
+and
+```
+{
+  "utterance": "get a token",
+  "intent_type": "GetTokenIntent",
+  "intent": {
+    "AddTaskToListKeyword": "get"
+  }
+}
+```
