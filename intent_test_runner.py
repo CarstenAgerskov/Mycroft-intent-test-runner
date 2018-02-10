@@ -8,8 +8,9 @@ from mycroft.util.log import LOG
 from mycroft.messagebus.message import Message
 import os
 import json
+import time
 
-TEST_PATH = "/tests/intent/"
+TEST_PATH = "/test/intent/"
 
 class SkillTestContainer(object):
     def __init__(self, args):
@@ -23,6 +24,7 @@ class SkillTestContainer(object):
 
         sys.path.append(params.dir)
         self.dir = params.dir
+        self.verbose = int(params.verbose)
 
         self.test_suite = None
 
@@ -37,6 +39,7 @@ class SkillTestContainer(object):
         parser.add_argument("--host", default=None)
         parser.add_argument("--port", default=None)
         parser.add_argument("--use-ssl", action='store_true', default=False)
+        parser.add_argument("--verbose", default=0)
         return parser.parse_args(args)
 
 
@@ -68,33 +71,85 @@ class SkillTestContainer(object):
     def test_runner(self):
         test_suite = self.read_test_suite(self.dir)
         for test_case in test_suite:
+            op = self.test_case_to_op(test_case)
             m = Message("recognizer_loop:utterance", {"lang": "en-us", "utterances": [test_case['utterance']]})
             self.ws.send(m.serialize())
+            if self.verbose > 0:
+                print "Test case: " + str(test_case)
+                print "Utterance: " + str(test_case['utterance'])
             try:
+                timeout = time.time() + 30
                 while True:
                     self.ws.settimeout(30)
                     result = json.loads(self.ws.recv())
-                    if self.analyse_message(result, test_case):
+                    if self.verbose > 1:
+                        print result
+                    self.op_evaluate(op, result)
+                    if op[-1] == 'succeeded':
+                        print "Succeeded: " + test_case['intent_type']
+                        break
+                    if time.time() > timeout:
+                        print "Failed: " + test_case['intent_type']
                         break
             except WebSocketTimeoutException:
+                print "Failed: " + test_case['intent_type']
                 pass
 
-    def analyse_message(self, result, test_case):
-        if str(result['type']).endswith(str(test_case['intent_type'])):
-            print "Intent: " + str(result['type'])
-        if str(result['type']) == "mycroft.skill.handler.start":
-            print "Skill start: " + result['data']['handler']
-        if str(result['type']) == "mycroft.skill.handler.complete":
-            print "Skill end: " + result['data']['handler']
-            print "-------------------"
-            return True
-        if str(result['type']) == "remove_context":
-            print "Remove context: " + result['data']['context']
-        if str(result['type']) == "add_context":
-            print "Add context: " + result['data']['context']
-        if str(result['type']) == "speak":
-            print "Speak: " + result['data']['utterance']
-        return False
+
+    def test_case_to_op(self, test_case):
+        op = ['and']
+        if test_case.get('utterance', None):
+            op.append(['endsWith', 'type', str(test_case['intent_type'])])
+
+        if test_case.get('intent', None):
+            for item in test_case['intent'].items():
+                op.append(['equal', ['data', str(item[0])], str(item[1])])
+
+        return op
+
+    def get_field_value(self, op, msg):
+        if isinstance(op, list):
+            value = msg.get(op[0], None)
+            if len(op) > 1 and value:
+                for field in op[1:]:
+                    value = value.get(field, None)
+                    if not value:
+                        break
+        else:
+            value =  msg.get(op, None)
+
+        return value
+
+    def op_evaluate(self, op, msg):
+        if op[0] == 'equal':
+            if self.get_field_value(op[1], msg) != op[2]:
+                return False
+
+        if op[0] == 'notEqual':
+            if self.get_field_value(op[1], msg) == op[2]:
+                return False
+
+        if op[0] == 'endsWith':
+            if not self.get_field_value(op[1], msg).endswith(op[2]):
+                return False
+
+        if op[0] == 'and':
+            for i in op[1:]:
+                if not self.op_evaluate(i,msg):
+                    return False
+
+        if op[0] == 'or':
+            for i in op[1:]:
+                if self.op_evaluate(i,msg):
+                    op.append('succeeded')
+                    return True
+            return False
+
+        op.append('succeeded')
+        return True
+
+
+
 def main():
     container = SkillTestContainer(sys.argv[1:])
     try:
