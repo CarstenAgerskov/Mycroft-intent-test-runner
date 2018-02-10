@@ -84,6 +84,29 @@ The internal test format above is actually quite powerfull, the code already sup
 ```
 and besides "and" also "or" and "not" is supported.
 
+# Troubleshoot a failed test
+Using verbose level 1 the intent test runner diaplays:
+* The Utterance is displayed
+* The test
+* The result of the parts of the test
+
+For instance:
+```
+Test case: {u'intent': {u'AddTaskToListKeyword': u'get token'}, u'intent_type': u'GetTokenIntent', u'utterance': u'get a token'}
+Utterance: get a token
+Failed: GetTokenIntent
+Test status: ['and', ['endsWith', 'type', 'GetTokenIntent', 'succeeded'], ['equal', ['data', 'AddTaskToListKeyword'], 'get token']]
+
+```
+If we look at the "Test status", we can see that the type=GetTokenIntent succeeded. The intent test runner added (at least one) 'succeeded' to the end of the comparesion.
+However, data.AddTaskToListKeyword='get token' was not marked succeeded. Probably because AddTaskToListKeyword is wrong, is
+should be GetTokenKeyword.
+
+When using verbose level 2 all messages on the bus are logged. It is possible to find the message that the test case for GetTokenIntent is working on:
+```
+{u'type': u'4175061547157869683:GetTokenIntent', u'data': {u'confidence': 1.0, u'target': None, u'intent_type': u'4175061547157869683:GetTokenIntent', u'GetTokenKeyword': u'get token', u'__tags__': [{u'end_token': 1, u'start_token': 0, u'from_context': False, u'entities': [{u'confidence': 1.0, u'data': [[u'get token', u'GetTokenKeyword']], u'key': u'get token', u'match': u'get token'}], u'key': u'get token', u'match': u'get token'}], u'utterance': u'get a token'}, u'context': {u'target': None}}
+```
+and it is indeed using the key named GetTokenKeyword for the keyword.
 
 ## To do
 * Find out how best to report test results. Logs, exit codes?

@@ -9,6 +9,7 @@ from mycroft.messagebus.message import Message
 import os
 import json
 import time
+import re
 
 TEST_PATH = "/test/intent/"
 
@@ -94,7 +95,8 @@ class SkillTestContainer(object):
             except WebSocketTimeoutException:
                 print "Failed: " + test_case['intent_type']
                 pass
-
+            if self.verbose > 0:
+                print "Test status: " + str(op)
 
     def test_case_to_op(self, test_case):
         op = ['and']
@@ -131,6 +133,10 @@ class SkillTestContainer(object):
 
         if op[0] == 'endsWith':
             if not self.get_field_value(op[1], msg).endswith(op[2]):
+                return False
+
+        if op[0] == 'match':
+            if not re.match(op[2], self.get_field_value(op[1], msg)):
                 return False
 
         if op[0] == 'and':
