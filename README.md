@@ -76,11 +76,11 @@ The test runner transforms the json files in test/intent/ into an "internal test
 is transformed into
 
 ```
-['and',
+[['and',
     ['endsWith', 'type', 'AddTaskToListIntent'],
     ['equal', ['data', 'listName'], 'none'],
     ['equal', ['data', 'taskName'], 'some'],
-    ['equal', ['data', 'AddTaskToListKeyword'], 'add']]
+    ['equal', ['data', 'AddTaskToListKeyword'], 'add']]]
 ```
 
 The above is then used to test this message on the bus:
@@ -88,18 +88,60 @@ The above is then used to test this message on the bus:
 {u'type': u'4175061547157869683:AddTaskToListIntent', u'data': {u'listName': u'none', u'AddTaskToListKeyword': u'add', u'target': None, u'intent_type': u'4175061547157869683:AddTaskToListIntent', u'confidence': 0.2, u'__tags__': [{u'end_token': 0, u'start_token': 0, u'from_context': False, u'entities': [{u'confidence': 1.0, u'data': [[u'add', u'AddTaskToListKeyword']], u'key': u'add', u'match': u'add'}], u'key': u'add', u'match': u'add'}, {u'end_token': 1, u'start_token': 1, u'from_context': False, u'entities': [{u'confidence': 0.5, u'data': [[u'some', u'taskName']], u'key': u'some', u'match': u'some'}], u'key': u'some', u'match': u'some'}, {u'end_token': 4, u'start_token': 4, u'from_context': False, u'entities': [{u'confidence': 0.5, u'data': [[u'none', u'listName']], u'key': u'none', u'match': u'none'}], u'key': u'none', u'match': u'none'}], u'taskName': u'some', u'utterance': u'add some to my none list'}, u'context': {u'target': None}}
 ```
 
+The internal test format can be used in the json test file as well. The example below adds tests for removeal of two contexts:
+```
+{
+  "utterance": "add some to my none list",
+  "intent_type": "AddTaskToListIntent",
+  "intent": {
+    "taskName": "some",
+    "listName": "none",
+    "AddTaskToListKeyword": "add"
+  },
+  "assert": "[['and', ['equal', 'type', 'speak'], ['match', ['data', 'utterance'], 'I can\\'t find a list called none.*']], ['and', ['equal', 'type', 'remove_context'], ['equal', ['data', 'context'], 'UndoContext']], ['and', ['equal', 'type', 'remove_context'], ['equal', ['data', 'context'], 'ConfirmContext']]]"
+}
+
+```
+
+After transformation to internal test format we get:
+```
+[
+    ['and',
+        ['endsWith', 'type', 'AddTaskToListIntent'],
+        ['equal', ['data', 'listName'], 'none'],
+        ['equal', ['data', 'taskName'], 'some'],
+        ['equal', ['data', 'AddTaskToListKeyword'], 'add']
+    ],
+    ['and',
+        ['equal', 'type', 'speak'],
+        ['match', ['data', 'utterance'], "I can't find a list called none.*"]
+    ],
+    ['and',
+        ['equal', 'type', 'remove_context'],
+        ['equal', ['data', 'context'], 'UndoContext']
+    ],
+    ['and',
+        ['equal', 'type', 'remove_context'],
+        ['equal', ['data', 'context'], 'ConfirmContext']
+    ]
+]
+```
+
+The above contains 4 different tests, because 4 different messages on the bus are to be tested.
+Also note the 'match' operation used to verofy the utterance, it is a regular expression evaluation.
+
 The internal test format above is actually quite powerfull, the code already supports that operations can be nested to any depth, for instance:
 ```
-['and',
+[['and',
     ['endsWith', 'type', 'AddTaskToListIntent'],
     ['or',
         ['equal', ['data', 'listName'], 'none'],
         ['equal', ['data', 'taskName'], 'some']
     ],
     ['equal', ['data', 'AddTaskToListKeyword'], 'add']
-]
+]]
 ```
-and besides "and" also "or" and "not" is supported.
+and besides "and" also "or" and "not" are supported.
 
 ## Troubleshoot a failed test
 Using verbose level 1 the intent test runner diaplays:
@@ -127,7 +169,6 @@ and it is indeed using the key named GetTokenKeyword for the keyword.
 
 ## To do
 * Find out how best to report test results. Logs, exit codes, dashboard?
-* Add possibility to write tests in the "internal test format" for very powerfull tests.
 * Find a way to make the skill aware that the skill runner is initiating the request, to avoid execution code with side effects in the skill
 * Add support for "expected_dialog"
 * Could messages be lost using this implementation?

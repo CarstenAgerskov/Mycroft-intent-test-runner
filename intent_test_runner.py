@@ -2,7 +2,6 @@ import argparse
 import sys
 from websocket import create_connection, WebSocketTimeoutException
 from os.path import dirname, exists, isdir
-
 from mycroft.configuration import Configuration
 from mycroft.util.log import LOG
 from mycroft.messagebus.message import Message
@@ -12,6 +11,9 @@ import time
 import re
 
 TEST_PATH = "/test/intent/"
+OKGREEN = '\033[92m'
+FAIL = '\033[91m'
+ENDC = '\033[0m'
 
 class SkillTestContainer(object):
     def __init__(self, args):
@@ -58,6 +60,7 @@ class SkillTestContainer(object):
         uri = 'ws://' + params.host + ':' + str(params.port) + '/core'
         try:
             self.ws = create_connection(uri)
+            self.ws.settimeout(10)
         except Exception as e:
             print format(e)
             print "Did you forget to start Mycroft?"
@@ -69,11 +72,13 @@ class SkillTestContainer(object):
             sorted(filter(lambda f: f.endswith(".json"), os.listdir(home_dir + TEST_PATH))))
         return test_suite
 
+
     def run_test_suite(self):
         try:
             if self.all_skills:
-                for d in filter(lambda x: x.startswith("/opt/mycroft/skills") and x.endswith("/test/intent"), [x[0] for x in os.walk("/opt/mycroft/skills")]):
+                for d in filter(lambda x: re.findall("/opt/mycroft/skills/.*?/test/intent",x), [x[0] for x in os.walk("/opt/mycroft/skills")]):
                     _dir = re.findall("/opt/mycroft/skills/.*?/",d)[0]
+                    print "Running test for: " + _dir
                     self.test_runner(_dir)
                 return self.succeeded
             else:
@@ -83,49 +88,67 @@ class SkillTestContainer(object):
             LOG.error("Error: {0}".format(e))
             self.stop()
 
+
     def test_runner(self, dir):
         if self.verbose > 0:
             print "Testing skill: " + dir
         test_suite = self.read_test_suite(dir)
         for test_case in test_suite:
             op = self.test_case_to_op(test_case)
-            m = Message("recognizer_loop:utterance", {"lang": "en-us", "utterances": [test_case['utterance']]})
-            self.ws.send(m.serialize())
+            _m = Message("recognizer_loop:utterance", {"lang": "en-us", "utterances": [test_case['utterance']]})
+            self.ws.send(_m.serialize())
             if self.verbose > 0:
                 print "Test case: " + str(test_case)
                 print "Utterance: " + str(test_case['utterance'])
-            try:
-                timeout = time.time() + 30
-                while True:
-                    self.ws.settimeout(30)
+
+            timeout = time.time() + 30
+            while True:
+                try:
                     result = json.loads(self.ws.recv())
                     if self.verbose > 1:
                         print result
-                    self.op_evaluate(op, result)
-                    if op[-1] == 'succeeded':
-                        print "Succeeded: " + test_case['intent_type']
+
+                    for _x in op:
+                        self.op_evaluate(_x, result)
+
+                    if not filter(lambda x: x[-1] != 'succeeded', op):
                         break
                     if time.time() > timeout:
-                        print "Failed: " + test_case['intent_type']
-                        self.succeeded = False
                         break
-            except WebSocketTimeoutException:
-                print "Failed: " + test_case['intent_type']
+                except WebSocketTimeoutException:
+                    pass
+
+            if not filter(lambda x: x[-1] != 'succeeded', op):
+                print OKGREEN + "Succeeded: " + test_case['intent_type'] + ENDC
+            else:
+                print FAIL + "Failed: " + test_case['intent_type'] + ENDC
                 self.succeeded = False
-                pass
+                break
+
             if self.verbose > 0:
                 print "Test status: " + str(op)
 
+
     def test_case_to_op(self, test_case):
-        op = ['and']
+        op= []
+
+        _x = ['and']
         if test_case.get('utterance', None):
-            op.append(['endsWith', 'type', str(test_case['intent_type'])])
+            _x.append(['endsWith', 'type', str(test_case['intent_type'])])
 
         if test_case.get('intent', None):
             for item in test_case['intent'].items():
-                op.append(['equal', ['data', str(item[0])], str(item[1])])
+                _x.append(['equal', ['data', str(item[0])], str(item[1])])
+
+        if _x != ['and']:
+            op.append(_x)
+
+        if test_case.get('assert', None):
+            for _x in eval(test_case['assert']):
+                op.append(_x)
 
         return op
+
 
     def get_field_value(self, op, msg):
         if isinstance(op, list):
@@ -171,7 +194,6 @@ class SkillTestContainer(object):
 
         op.append('succeeded')
         return True
-
 
 
 def main():
