@@ -19,7 +19,23 @@ Run it with:
 ```python
 python intent_test_runner.py /opt/mycroft/skills/your-skill
 ```
-Optionaly add a ```--verbose 1``` to see some logging, or ```--verbose 2``` to see some more.
+or more formalised:
+```
+Usage:
+    python intent_test_runner.py [{skill_path | --all-skills}] [--config config_file] [--host host] [--port port] [--verbose level]
+
+Options:
+--all-skills
+    Run the intent test runner on all skills in /opt/mycroft/skills whit a test/intent folder
+--config
+    Path to config_file mycroft.conf containing host and port configuration
+--host
+    Host for web socket to use, override mycroft.conf
+--port
+    Port for web socket to use, override mycroft.conf
+--verbose
+    Verbose level, 1 or 2
+```
 
 The json files containing test data is in the skills /test/intent/
 folder. They are formatted as messages, and sent on the bus, in alphabetic order of the file name.
@@ -39,11 +55,12 @@ Failed: GetTokenIntent
 
 An intent succeedes if all test are passed for the intent. And in that case the test runner immedeately continues to the next test.
 If all tests have not succeeded 30 seconds after the utterence, the test is failed.
+Because of this, a failed test will take at least 30 seconds to complete.
 
 If you want to try the test runner on some existing skills, read the section on skill status at the end of the document.
 
-# Internal representation, and how it can be used
-The json files in test/intent/ is transformed to an "internal test format". The example below:
+## Internal representation
+The test runner transforms the json files in test/intent/ into an "internal test format". The example below:
 ```
 {
   "utterance": "add some to my none list",
@@ -84,7 +101,7 @@ The internal test format above is actually quite powerfull, the code already sup
 ```
 and besides "and" also "or" and "not" is supported.
 
-# Troubleshoot a failed test
+## Troubleshoot a failed test
 Using verbose level 1 the intent test runner diaplays:
 * The Utterance is displayed
 * The test
@@ -109,12 +126,15 @@ When using verbose level 2 all messages on the bus are logged. It is possible to
 and it is indeed using the key named GetTokenKeyword for the keyword.
 
 ## To do
-* Find out how best to report test results. Logs, exit codes?
-* Add an option to run on all /opt/mycroft/skills/*/test/intent
+* Find out how best to report test results. Logs, exit codes, dashboard?
 * Add possibility to write tests in the "internal test format" for very powerfull tests.
 * Find a way to make the skill aware that the skill runner is initiating the request, to avoid execution code with side effects in the skill
-* Add support for "expected_dialog".
-* Add regex expression validation to the "internal test format", to allow for more fleksible match on dialog.
+* Add support for "expected_dialog"
+* Could messages be lost using this implementation?
+* Syntax check of json files
+* More resiliance and better reporting of internal errors in the test runner itself
+* How to retreive a list of intents for a skill
+* How to handle unreachable intents, like in a context
 
 ### Integration into Mycroft core
 If this test runner it is found usable, it could be added to mycroft-core

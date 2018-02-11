@@ -26,14 +26,17 @@ class SkillTestContainer(object):
         sys.path.append(params.dir)
         self.dir = params.dir
         self.verbose = int(params.verbose)
+        self.all_skills = params.all_skills
 
         self.test_suite = None
+        self.succeeded = True
 
         self.__init_client(params)
 
     @staticmethod
     def __build_params(args):
         parser = argparse.ArgumentParser()
+        parser.add_argument("--all-skills", action='store_true', default=False)
         parser.add_argument("--config", default="./mycroft.conf")
         parser.add_argument("dir", nargs='?', default=dirname(__file__))
         parser.add_argument("--lib", default="./lib")
@@ -53,8 +56,12 @@ class SkillTestContainer(object):
             params.port = config.get('port')
 
         uri = 'ws://' + params.host + ':' + str(params.port) + '/core'
-        self.ws = create_connection(uri)
-
+        try:
+            self.ws = create_connection(uri)
+        except Exception as e:
+            print format(e)
+            print "Did you forget to start Mycroft?"
+            exit(1)
 
     def read_test_suite(self, home_dir):
         test_suite = []
@@ -64,13 +71,22 @@ class SkillTestContainer(object):
 
     def run_test_suite(self):
         try:
-            self.test_runner()
+            if self.all_skills:
+                for d in filter(lambda x: x.startswith("/opt/mycroft/skills") and x.endswith("/test/intent"), [x[0] for x in os.walk("/opt/mycroft/skills")]):
+                    _dir = re.findall("/opt/mycroft/skills/.*?/",d)[0]
+                    self.test_runner(_dir)
+                return self.succeeded
+            else:
+                self.test_runner(self.dir)
+                return self.succeeded
         except Exception as e:
             LOG.error("Error: {0}".format(e))
             self.stop()
 
-    def test_runner(self):
-        test_suite = self.read_test_suite(self.dir)
+    def test_runner(self, dir):
+        if self.verbose > 0:
+            print "Testing skill: " + dir
+        test_suite = self.read_test_suite(dir)
         for test_case in test_suite:
             op = self.test_case_to_op(test_case)
             m = Message("recognizer_loop:utterance", {"lang": "en-us", "utterances": [test_case['utterance']]})
@@ -91,9 +107,11 @@ class SkillTestContainer(object):
                         break
                     if time.time() > timeout:
                         print "Failed: " + test_case['intent_type']
+                        self.succeeded = False
                         break
             except WebSocketTimeoutException:
                 print "Failed: " + test_case['intent_type']
+                self.succeeded = False
                 pass
             if self.verbose > 0:
                 print "Test status: " + str(op)
@@ -158,12 +176,8 @@ class SkillTestContainer(object):
 
 def main():
     container = SkillTestContainer(sys.argv[1:])
-    try:
-        container.run_test_suite()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        sys.exit()
+    if not container.run_test_suite():
+        exit(1)
 
 if __name__ == "__main__":
     main()
